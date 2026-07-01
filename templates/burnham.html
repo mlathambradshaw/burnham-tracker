@@ -1,0 +1,448 @@
+{% extends "base.html" %}
+
+{% block title %}Burnham Tracker — Bradshaw Advisory{% endblock %}
+
+{% block head %}
+<style>
+  .panel { background: var(--panel); border:1px solid var(--border); border-radius:6px; }
+  .panel-title { font-family:var(--head); font-size:1rem; font-weight:700; color:var(--text); text-transform:uppercase; letter-spacing:.04em; }
+  .panel-sub { font-size:.8rem; color:var(--muted); line-height:1.5; }
+
+  .sol { display:inline-block; padding:1px 8px; font-size:.64rem; font-weight:700; border-radius:999px; text-transform:uppercase; letter-spacing:.05em; font-family:var(--head); }
+  .sol-topic    { background:rgba(255,255,255,.08); color:#a8a8b0; }
+  .sol-emerging { background:rgba(76,160,167,.18); color:var(--teal-soft); }
+  .sol-firm     { background:rgba(234,82,120,.18); color:var(--pink-soft); }
+
+  .area-pill { display:inline-block; padding:1px 8px; font-size:.68rem; font-weight:600; background:rgba(255,255,255,.05); color:#cfcfd6; border:1px solid var(--border); border-radius:999px; }
+
+  .flag { display:inline-flex; align-items:center; gap:4px; padding:1px 7px; font-size:.64rem; font-weight:700; border-radius:999px; font-family:var(--head); text-transform:uppercase; letter-spacing:.04em; }
+  .flag-change { background:transparent; color:var(--pink-soft); border:1px solid rgba(234,82,120,.5); }
+  .flag-flip   { background:transparent; color:var(--teal-soft); border:1px solid rgba(76,160,167,.5); }
+
+  /* Position card */
+  .pos-card { padding:11px 0; border-bottom:1px solid var(--border); }
+  .pos-card:last-child { border-bottom:none; }
+  .pos-text { font-size:.95rem; color:var(--text); line-height:1.45; }
+  .pos-quote { font-size:.8rem; color:var(--faint); font-style:italic; margin-top:3px; display:-webkit-box; -webkit-line-clamp:1; -webkit-box-orient:vertical; overflow:hidden; }
+  .pos-meta { margin-top:7px; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .pos-date { font-size:.72rem; color:var(--faint); margin-left:auto; }
+  .src-link { color:var(--teal-soft); text-decoration:none; font-size:.72rem; }
+  .src-link:hover { text-decoration:underline; }
+
+  /* Heatmap */
+  .hm-grid { display:grid; gap:2px; align-items:center; }
+  .hm-area { font-size:.75rem; color:var(--muted); text-align:right; padding-right:10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer; }
+  .hm-area:hover { color:var(--pink-soft); }
+  .hm-cell { height:18px; border-radius:2px; }
+  .hm-cell.col-active { outline:2px solid var(--pink); outline-offset:-1px; }
+  .hm-cell.col-window { box-shadow:inset 0 0 0 1px rgba(255,255,255,.12); }
+  .hm-axis { font-size:.625rem; color:var(--faint); text-align:center; height:14px; }
+
+  .snap-row { display:grid; grid-template-columns:150px 1fr 30px; align-items:center; gap:8px; margin-bottom:5px; }
+  .snap-label { font-size:.72rem; color:var(--muted); text-align:right; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .snap-track { background:#1f1f1f; border-radius:3px; height:14px; overflow:hidden; }
+  .snap-fill { background:var(--pink); height:100%; border-radius:3px; transition:width .25s ease; }
+  .snap-count { font-size:.72rem; color:var(--muted); }
+
+  .dev-row { display:grid; grid-template-columns:160px 1fr 30px; align-items:center; gap:8px; padding:6px 0; cursor:pointer; border-bottom:1px solid var(--border); }
+  .dev-row:hover .dev-label { color:var(--pink-soft); }
+  .dev-label { font-size:.75rem; color:var(--muted); text-align:right; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .dev-bar { display:flex; height:13px; border-radius:3px; overflow:hidden; background:#1f1f1f; }
+  .dev-seg-topic{background:#3f3f46;} .dev-seg-emerging{background:var(--teal);} .dev-seg-firm{background:var(--pink);}
+  .dev-count { font-size:.72rem; color:var(--faint); }
+
+  .modal-bg { position:fixed; inset:0; background:rgba(0,0,0,.72); display:none; align-items:flex-start; justify-content:center; z-index:1000; padding:40px 16px; overflow-y:auto; }
+  .modal-bg.show { display:flex; }
+  .modal { background:var(--panel); border:1px solid var(--border); color:var(--text); border-radius:8px; max-width:880px; width:100%; padding:22px 24px; box-shadow:0 12px 40px rgba(0,0,0,.5); }
+  .modal-close { float:right; cursor:pointer; color:var(--muted); font-size:1.25rem; line-height:1; border:none; background:none; }
+  .tl-dot { cursor:pointer; }
+  .tl-tip { position:fixed; z-index:1100; max-width:320px; background:#000; border:1px solid var(--border); color:#fff; font-size:.75rem; line-height:1.45; padding:8px 10px; border-radius:5px; pointer-events:none; display:none; box-shadow:0 4px 14px rgba(0,0,0,.5); }
+  .legend-dot { display:inline-block; width:9px; height:9px; border-radius:50%; vertical-align:middle; margin-right:4px; }
+
+  /* Responsive two-column layouts — stack on narrow viewports */
+  .hm-split { display:grid; grid-template-columns:1.4fr 1fr; gap:24px; align-items:start; }
+  .two-col  { display:grid; grid-template-columns:1.3fr 1fr; gap:18px; }
+  @media (max-width: 980px){
+    .hm-split, .two-col { grid-template-columns:1fr; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Toolbar -->
+<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; flex-wrap:wrap; gap:10px;">
+  <div>
+    <h1 style="font-size:1.6rem; color:var(--text);">What Burnham is saying</h1>
+    <p style="margin:4px 0 0; font-size:.85rem; color:var(--muted);">Andy Burnham's policy positions in his own words and his team's, as he prepares to enter Downing Street.</p>
+  </div>
+  <div style="display:flex; align-items:center; gap:10px;">
+    <span id="status-text" style="font-size:.78rem; color:var(--muted);"></span>
+    <button class="btn-secondary" onclick="openPaste()">+ Add statement</button>
+    <button class="btn-primary" id="refresh-btn" onclick="runRefresh()">
+      <span class="spinner" id="refresh-spin" style="display:none; width:14px; height:14px;"></span>
+      Refresh
+    </button>
+  </div>
+</div>
+
+<div id="loading-state" style="display:flex; flex-direction:column; align-items:center; padding:64px 0; gap:14px;">
+  <div class="spinner spinner-lg"></div>
+  <p style="font-size:.9rem; color:var(--muted); margin:0;">Loading…</p>
+</div>
+<div id="empty-state" style="display:none; padding:56px; text-align:center;">
+  <p style="color:var(--text); font-size:1rem; margin:0 0 6px;">No positions yet.</p>
+  <p style="color:var(--muted); font-size:.85rem; margin:0 0 16px;">Run a scan to gather what Burnham has said.</p>
+  <button class="btn-primary" onclick="runRefresh()">Run scan</button>
+</div>
+
+<div id="dashboard" style="display:none;">
+
+  <!-- About this tracker -->
+  <div class="panel" style="padding:16px 18px; margin-bottom:18px;">
+    <div class="panel-title" style="margin-bottom:8px;">About this tracker</div>
+    <p style="font-size:.85rem; color:var(--muted); margin:0 0 12px; max-width:900px; line-height:1.55;">
+      The positions Burnham has set out, taken only from his own words and those of his close team.
+      Each is graded by how firm it is, from a passing theme to a concrete commitment.
+    </p>
+    <div style="display:flex; flex-wrap:wrap; gap:16px 36px;">
+      <div>
+        <div class="panel-title" style="font-size:.72rem; color:var(--pink-soft); margin-bottom:6px;">How firm is a position?</div>
+        <div style="display:flex; flex-direction:column; gap:4px; font-size:.8rem; color:var(--muted);">
+          <span><span class="sol sol-topic">topic</span> &nbsp;a theme he has raised, with no specific policy behind it</span>
+          <span><span class="sol sol-emerging">emerging</span> &nbsp;a clear direction, but not the detail</span>
+          <span><span class="sol sol-firm">firm</span> &nbsp;a specific commitment to act</span>
+        </div>
+      </div>
+      <div>
+        <div class="panel-title" style="font-size:.72rem; color:var(--pink-soft); margin-bottom:6px;">Flags and dates</div>
+        <div style="display:flex; flex-direction:column; gap:4px; font-size:.8rem; color:var(--muted);">
+          <span><span class="flag flag-change">⚡ Departure</span> &nbsp;a break from the current government's position</span>
+          <span><span class="flag flag-flip">⟲ Flip-flop</span> &nbsp;a reversal of something he said earlier</span>
+          <span style="color:var(--faint);">Dated to when he said it where the source is clear, otherwise to when it was reported.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Attention heatmap -->
+  <div class="panel" style="padding:16px 18px; margin-bottom:18px;">
+    <div style="margin-bottom:14px;">
+      <span class="panel-title">Attention heatmap</span>
+      <div class="panel-sub" style="margin-top:5px; max-width:940px;">
+        Rows are policy areas; columns are days since the Makerfield by-election. The darker a square, the more he said
+        about that area that day. Move the slider to a date and the panel on the right ranks the areas by his attention over the preceding week.
+      </div>
+    </div>
+    <div class="hm-split">
+      <div>
+        <div id="heatmap"></div>
+        <div style="margin-top:14px;">
+          <input type="range" id="scrubber" min="0" max="1" value="1" style="width:100%;">
+          <div style="display:flex; justify-content:space-between; font-size:.72rem; color:var(--faint);">
+            <span>Makerfield result</span>
+            <span id="scrub-label" style="color:var(--text); font-weight:600;"></span>
+            <span>today</span>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="panel-sub" style="margin-bottom:8px;">Attention by area, week to <span id="snap-date" style="font-weight:600; color:var(--text);"></span></div>
+        <div id="snapshot"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Latest positions + Area development -->
+  <div class="two-col">
+    <div class="panel" style="padding:16px 18px;">
+      <div style="margin-bottom:8px;">
+        <span class="panel-title">Latest positions</span>
+        <div class="panel-sub" style="margin-top:5px;">
+          His ten most recent positions, newest first. Each shows the policy, how firm it is, and the source. Hover for the words themselves.
+        </div>
+      </div>
+      <div id="latest-feed"></div>
+    </div>
+
+    <div class="panel" style="padding:16px 18px;">
+      <div style="margin-bottom:10px;">
+        <span class="panel-title">Area development</span>
+        <div class="panel-sub" style="margin-top:5px;">
+          For each area, how his positions divide between
+          <span style="white-space:nowrap;"><span class="legend-dot" style="background:#3f3f46;"></span>themes</span>,
+          <span style="white-space:nowrap;"><span class="legend-dot" style="background:var(--teal);"></span>emerging views</span> and
+          <span style="white-space:nowrap;"><span class="legend-dot" style="background:var(--pink);"></span>firm commitments</span>.
+          A pinker bar means more settled policy; the number is the total. Select an area for its timeline.
+        </div>
+      </div>
+      <div id="dev-panel"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Area timeline modal -->
+<div class="modal-bg" id="area-modal" onclick="if(event.target===this) closeModal('area-modal')">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('area-modal')">&times;</button>
+    <h2 id="area-modal-title" style="font-size:1.15rem; color:var(--text); margin:0 0 4px;"></h2>
+    <p class="panel-sub" style="margin:0 0 14px;">
+      Each point is a position, set by date (left to right, from the by-election to today) and by how firm it is (theme at the bottom, commitment at the top).
+      A dashed line marks a reversal. Hover a point for detail.
+    </p>
+    <div id="area-timeline" style="position:relative;"></div>
+    <div id="area-list" style="margin-top:16px; display:flex; flex-direction:column;"></div>
+  </div>
+</div>
+
+<!-- Paste modal -->
+<div class="modal-bg" id="paste-modal" onclick="if(event.target===this) closeModal('paste-modal')">
+  <div class="modal" style="max-width:560px;">
+    <button class="modal-close" onclick="closeModal('paste-modal')">&times;</button>
+    <h2 style="font-size:1.15rem; color:var(--text); margin:0 0 4px;">Add a statement</h2>
+    <p class="panel-sub" style="margin:0 0 14px;">Paste a quote, tweet or line from a speech. It will be analysed and added to the tracker.</p>
+    <textarea id="paste-text" class="form-textarea" rows="6" placeholder="Paste what Burnham (or a named adviser) said…"></textarea>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px;">
+      <input id="paste-source" class="form-input" placeholder="Source (e.g. Sky News interview)">
+      <input id="paste-date" type="date" class="form-input">
+    </div>
+    <div style="margin-top:14px; text-align:right;">
+      <button class="btn-primary" id="paste-submit" onclick="submitPaste()">Extract &amp; add</button>
+    </div>
+  </div>
+</div>
+
+<div class="tl-tip" id="tl-tip"></div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function(){
+  const SOL_COLOR = { topic:'#71717a', emerging:'#4ca0a7', firm:'#ea5278' };
+  let DATA = null, ALL = [];
+
+  document.addEventListener('DOMContentLoaded', loadData);
+
+  async function loadData(){
+    try{
+      const r = await fetch('/api/burnham-data');
+      DATA = await r.json();
+      ALL = Object.values(DATA.by_area||{}).flat();
+      setStatus(DATA.meta);
+      if(!ALL.length){ show('empty'); return; }
+      renderAll();
+      show('dashboard');
+    }catch(e){ console.error(e); show('empty'); }
+  }
+
+  function setStatus(meta){
+    let txt = '';
+    if(meta && meta.total) txt += meta.total + ' positions';
+    if(meta && meta.last_run) txt += ' · updated ' + fmtDate(meta.last_run);
+    document.getElementById('status-text').textContent = txt;
+    const hs = document.getElementById('header-status'); if(hs) hs.textContent = txt;
+  }
+
+  function show(state){
+    document.getElementById('loading-state').style.display = state==='loading'?'flex':'none';
+    document.getElementById('empty-state').style.display   = state==='empty'?'block':'none';
+    document.getElementById('dashboard').style.display     = state==='dashboard'?'block':'none';
+  }
+
+  function renderAll(){ renderHeatmap(); renderLatest(); renderDev(); }
+
+  // ── Heatmap ────────────────────────────────────────────────────────────
+  function renderHeatmap(){
+    const {dates, matrix} = DATA.heatmap;
+    const areas = DATA.policy_areas;
+    let max = 1; matrix.forEach(row=>row.forEach(v=>{ if(v>max) max=v; }));
+    const cols = dates.length;
+    const grid = document.getElementById('heatmap');
+    grid.innerHTML = ''; grid.className = 'hm-grid';
+    grid.style.gridTemplateColumns = `150px repeat(${cols}, minmax(0, 1fr))`;
+
+    const labelAll = cols <= 14;
+    grid.appendChild(document.createElement('div'));
+    dates.forEach((d,i)=>{
+      const ax=document.createElement('div'); ax.className='hm-axis';
+      if(labelAll || i===0 || i===cols-1 || i%7===0) ax.textContent=d.slice(8)+'/'+d.slice(5,7);
+      grid.appendChild(ax);
+    });
+    areas.forEach((area,ri)=>{
+      const lbl=document.createElement('div'); lbl.className='hm-area'; lbl.textContent=area; lbl.title=area;
+      lbl.onclick=()=>openArea(area); grid.appendChild(lbl);
+      for(let ci=0; ci<cols; ci++){
+        const v=(matrix[ri]&&matrix[ri][ci])||0;
+        const cell=document.createElement('div'); cell.className='hm-cell'; cell.dataset.col=ci;
+        const a=v?(0.18+0.82*(v/max)):0;
+        cell.style.background=v?`rgba(234,82,120,${a.toFixed(2)})`:'#191919';
+        cell.title=`${area} · ${dates[ci]} · ${v} position${v===1?'':'s'}`;
+        grid.appendChild(cell);
+      }
+    });
+    const sc=document.getElementById('scrubber');
+    sc.max=cols-1; sc.value=cols-1; sc.oninput=()=>updateScrub(+sc.value);
+    updateScrub(cols-1);
+  }
+
+  function updateScrub(idx){
+    const {dates, matrix} = DATA.heatmap; const areas=DATA.policy_areas;
+    document.getElementById('scrub-label').textContent=fmtDay(dates[idx]);
+    document.getElementById('snap-date').textContent=fmtDay(dates[idx]);
+    const lo=Math.max(0, idx-6);
+    document.querySelectorAll('.hm-cell').forEach(c=>{
+      const ci=+c.dataset.col;
+      c.classList.toggle('col-window', ci>=lo && ci<=idx);
+      c.classList.toggle('col-active', ci===idx);
+    });
+    const sums=areas.map((a,ri)=>{ let s=0; for(let j=lo;j<=idx;j++) s+=(matrix[ri]&&matrix[ri][j])||0; return {a,s}; })
+                    .sort((x,y)=>y.s-x.s);
+    const mx=Math.max(1,...sums.map(x=>x.s));
+    document.getElementById('snapshot').innerHTML=sums.map(x=>`
+      <div class="snap-row">
+        <div class="snap-label" title="${esc(x.a)}">${esc(x.a)}</div>
+        <div class="snap-track"><div class="snap-fill" style="width:${x.s?(8+92*x.s/mx):0}%; background:${x.s?'var(--pink)':'transparent'}"></div></div>
+        <div class="snap-count">${x.s||''}</div>
+      </div>`).join('');
+  }
+
+  // ── Latest positions ───────────────────────────────────────────────────
+  function renderLatest(){
+    const list = ALL.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,10);
+    const box=document.getElementById('latest-feed');
+    box.innerHTML = list.length ? list.map(cardHtml).join('')
+      : '<p class="panel-sub">Nothing captured yet.</p>';
+  }
+
+  function cardHtml(p){
+    const adviser = p.attributed_to && p.attributed_to!=='Andy Burnham';
+    return `<div class="pos-card" ${p.quote?`title="“${escA(p.quote)}”"`:''}>
+      <div class="pos-text">${esc(p.position)}</div>
+      ${p.quote?`<div class="pos-quote">“${esc(p.quote)}”</div>`:''}
+      <div class="pos-meta">
+        <span class="sol sol-${p.solidity}">${p.solidity}</span>
+        <span class="area-pill">${esc(p.policy_area)}</span>
+        ${adviser?`<span class="flag" style="color:#caa24a; border:1px solid rgba(202,162,74,.5);">${esc(p.attributed_to)}</span>`:''}
+        ${p.what_will_change?'<span class="flag flag-change">⚡ Departure</span>':''}
+        ${p.flip_flop?`<span class="flag flag-flip" title="${escA(p.flip_flop.note||'')}">⟲ Flip-flop</span>`:''}
+        <span class="pos-date">${fmtDate(p.date)}${p.url?` · <a class="src-link" href="${escA(p.url)}" target="_blank" rel="noopener">${esc(p.source)} ↗</a>`:` · ${esc(p.source)}`}</span>
+      </div>
+    </div>`;
+  }
+
+  // ── Area development ───────────────────────────────────────────────────
+  function renderDev(){
+    const box=document.getElementById('dev-panel');
+    box.innerHTML=DATA.policy_areas.map(area=>{
+      const items=(DATA.by_area[area]||[]);
+      const c={topic:0,emerging:0,firm:0}; items.forEach(p=>{c[p.solidity]=(c[p.solidity]||0)+1;});
+      const tot=items.length;
+      const seg=s=>tot?`<div class="dev-seg-${s}" style="width:${100*c[s]/tot}%"></div>`:'';
+      return `<div class="dev-row" data-area="${escA(area)}">
+        <div class="dev-label" title="${escA(area)}">${esc(area)}</div>
+        <div class="dev-bar">${tot?seg('topic')+seg('emerging')+seg('firm'):''}</div>
+        <div class="dev-count">${tot||''}</div>
+      </div>`;
+    }).join('');
+    box.querySelectorAll('.dev-row').forEach(r=>{ r.onclick=()=>openArea(r.dataset.area); });
+  }
+
+  // ── Area timeline modal ────────────────────────────────────────────────
+  function openArea(area){
+    document.getElementById('tl-tip').style.display='none';
+    const items=(DATA.by_area[area]||[]).slice().sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+    document.getElementById('area-modal-title').textContent=area;
+    document.getElementById('area-timeline').innerHTML=items.length?timelineSvg(items):'<p class="panel-sub">No positions captured in this area yet.</p>';
+    document.getElementById('area-list').innerHTML=items.slice().reverse().map(cardHtml).join('');
+    document.getElementById('area-modal').classList.add('show');
+    if(items.length) bindDots(items);
+  }
+
+  function timelineSvg(items){
+    const W=820, H=240, padL=80, padR=20, padT=20, padB=30;
+    const dates=DATA.heatmap.dates;
+    const min=new Date(dates[0]).getTime();
+    const max=new Date(dates[dates.length-1]).getTime();
+    const span=Math.max(1, max-min);
+    const x=t=>padL+(W-padL-padR)*((t-min)/span);
+    const yBand={topic:H-padB-20, emerging:(H-padB-padT)/2+padT, firm:padT+20};
+    const times=items.map(p=>new Date(p.date).getTime());
+    let svg=`<svg viewBox="0 0 ${W} ${H}" style="width:100%; height:auto;">`;
+    [['firm','Firm'],['emerging','Emerging'],['topic','Topic']].forEach(([k,lab])=>{
+      const yy=yBand[k];
+      svg+=`<line x1="${padL}" y1="${yy}" x2="${W-padR}" y2="${yy}" stroke="#262626"/>`;
+      svg+=`<text x="${padL-8}" y="${yy+4}" text-anchor="end" font-size="11" fill="${SOL_COLOR[k]}" font-weight="600">${lab}</text>`;
+    });
+    const byId={}; items.forEach((p,i)=>byId[p.id]=i);
+    items.forEach((p,i)=>{
+      if(p.flip_flop && byId[p.flip_flop.contradicts]!=null){
+        const j=byId[p.flip_flop.contradicts];
+        svg+=`<line x1="${x(times[j])}" y1="${yBand[items[j].solidity]}" x2="${x(times[i])}" y2="${yBand[p.solidity]}" stroke="#4ca0a7" stroke-width="1.5" stroke-dasharray="4 3"/>`;
+      }
+    });
+    items.forEach((p,i)=>{
+      const cx=x(times[i]), cy=yBand[p.solidity];
+      svg+=`<circle class="tl-dot" data-i="${i}" cx="${cx}" cy="${cy}" r="${p.what_will_change?7:5}" fill="${SOL_COLOR[p.solidity]}" stroke="#0a0a0a" stroke-width="1.5"/>`;
+      if(p.what_will_change) svg+=`<circle cx="${cx}" cy="${cy}" r="10" fill="none" stroke="#ea5278" stroke-width="1.2"/>`;
+    });
+    svg+=`<text x="${padL}" y="${H-8}" font-size="10" fill="#6b6b73">${fmtDay(dates[0])}</text>`;
+    svg+=`<text x="${W-padR}" y="${H-8}" text-anchor="end" font-size="10" fill="#6b6b73">${fmtDay(dates[dates.length-1])}</text>`;
+    svg+=`</svg>`;
+    return svg;
+  }
+
+  function bindDots(items){
+    const tip=document.getElementById('tl-tip');
+    document.querySelectorAll('#area-timeline .tl-dot').forEach(dot=>{
+      dot.addEventListener('mousemove', e=>{
+        const p=items[+dot.dataset.i];
+        tip.innerHTML=`<b>${p.solidity.toUpperCase()}</b> · ${fmtDay(p.date)}<br>${esc(p.position)}${p.quote?`<br><span style="color:#8f8f97">“${esc(p.quote)}”</span>`:''}`;
+        tip.style.display='block'; tip.style.left=(e.clientX+14)+'px'; tip.style.top=(e.clientY+14)+'px';
+      });
+      dot.addEventListener('mouseleave', ()=>{ tip.style.display='none'; });
+    });
+  }
+
+  // ── Refresh (SSE) ──────────────────────────────────────────────────────
+  window.runRefresh=function(){
+    const btn=document.getElementById('refresh-btn'), spin=document.getElementById('refresh-spin');
+    btn.disabled=true; spin.style.display='inline-block';
+    const st=document.getElementById('status-text');
+    const src=new EventSource('/api/refresh/stream');
+    src.onmessage=e=>{
+      let m; try{ m=JSON.parse(e.data); }catch{ return; }
+      if(m.type==='status') st.textContent=m.message;
+      if(m.type==='positions') st.textContent='Found '+(m.items?m.items.length:0)+' more…';
+      if(m.type==='error'){ st.textContent='Refresh failed.'; finishRefresh(src); }
+      if(m.type==='done'){ st.textContent=m.new?('Added '+m.new+' positions.'):'Up to date.'; finishRefresh(src); loadData(); }
+    };
+    src.onerror=()=>{ finishRefresh(src); loadData(); };
+  };
+  function finishRefresh(src){ if(src) src.close(); document.getElementById('refresh-btn').disabled=false; document.getElementById('refresh-spin').style.display='none'; }
+
+  // ── Paste ──────────────────────────────────────────────────────────────
+  window.openPaste=()=>document.getElementById('paste-modal').classList.add('show');
+  window.closeModal=id=>{ document.getElementById(id).classList.remove('show'); document.getElementById('tl-tip').style.display='none'; };
+  window.submitPaste=async function(){
+    const text=document.getElementById('paste-text').value.trim();
+    if(!text){ showToast('Paste some text first','error'); return; }
+    const btn=document.getElementById('paste-submit'); btn.disabled=true; btn.textContent='Extracting…';
+    try{
+      const r=await fetch('/api/paste',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({text, source:document.getElementById('paste-source').value.trim()||'Manual entry', date:document.getElementById('paste-date').value||undefined})});
+      const d=await r.json();
+      if(d.error){ showToast(d.error,'error'); }
+      else{ showToast(`Added ${d.added} position${d.added===1?'':'s'}`,'success'); document.getElementById('paste-text').value=''; closeModal('paste-modal'); loadData(); }
+    }catch(e){ showToast('Failed to add','error'); }
+    finally{ btn.disabled=false; btn.textContent='Extract & add'; }
+  };
+
+  // ── Helpers ────────────────────────────────────────────────────────────
+  function fmtDate(s){ if(!s) return ''; const d=new Date(s); return isNaN(d)?'':d.toLocaleDateString('en-GB',{day:'numeric',month:'short'}); }
+  function fmtDay(s){ return fmtDate(s); }
+  function esc(s){ return s==null?'':String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+  function escA(s){ return esc(s); }
+})();
+</script>
+{% endblock %}
