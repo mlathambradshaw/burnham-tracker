@@ -124,6 +124,21 @@
     </div>
   </div>
 
+  <!-- Area development -->
+  <div class="panel" style="padding:16px 18px; margin-bottom:18px;">
+    <div style="margin-bottom:10px;">
+      <span class="panel-title">Area development</span>
+      <div class="panel-sub" style="margin-top:5px;">
+        For each area, how his positions divide between
+        <span style="white-space:nowrap;"><span class="legend-dot" style="background:#3f3f46;"></span>themes</span>,
+        <span style="white-space:nowrap;"><span class="legend-dot" style="background:var(--teal);"></span>emerging views</span> and
+        <span style="white-space:nowrap;"><span class="legend-dot" style="background:var(--pink);"></span>firm commitments</span>.
+        A pinker bar means more settled policy; the number is the total. Select an area for its timeline.
+      </div>
+    </div>
+    <div id="dev-panel"></div>
+  </div>
+
   <!-- Attention heatmap -->
   <div class="panel" style="padding:16px 18px; margin-bottom:18px;">
     <div style="margin-bottom:14px;">
@@ -154,31 +169,15 @@
     </div>
   </div>
 
-  <!-- Latest positions + Area development -->
-  <div class="two-col">
-    <div class="panel" style="padding:16px 18px;">
-      <div style="margin-bottom:8px;">
-        <span class="panel-title">Latest positions</span>
-        <div class="panel-sub" style="margin-top:5px;">
-          His ten most recent positions, newest first. Each shows the policy, how firm it is, and the source. Hover for the words themselves.
-        </div>
+  <!-- Latest positions -->
+  <div class="panel" style="padding:16px 18px;">
+    <div style="margin-bottom:8px;">
+      <span class="panel-title">Latest positions</span>
+      <div class="panel-sub" style="margin-top:5px;">
+        His ten most recent positions, newest first. Each shows the policy, how firm it is, and the source. Hover for the words themselves.
       </div>
-      <div id="latest-feed"></div>
     </div>
-
-    <div class="panel" style="padding:16px 18px;">
-      <div style="margin-bottom:10px;">
-        <span class="panel-title">Area development</span>
-        <div class="panel-sub" style="margin-top:5px;">
-          For each area, how his positions divide between
-          <span style="white-space:nowrap;"><span class="legend-dot" style="background:#3f3f46;"></span>themes</span>,
-          <span style="white-space:nowrap;"><span class="legend-dot" style="background:var(--teal);"></span>emerging views</span> and
-          <span style="white-space:nowrap;"><span class="legend-dot" style="background:var(--pink);"></span>firm commitments</span>.
-          A pinker bar means more settled policy; the number is the total. Select an area for its timeline.
-        </div>
-      </div>
-      <div id="dev-panel"></div>
-    </div>
+    <div id="latest-feed"></div>
   </div>
 </div>
 
@@ -237,52 +236,69 @@
   function renderAll(){ renderHeatmap(); renderLatest(); renderDev(); }
 
   // ── Heatmap ────────────────────────────────────────────────────────────
-  function renderHeatmap(){
-    const {dates, matrix} = DATA.heatmap;
-    const areas = DATA.policy_areas;
-    let max = 1; matrix.forEach(row=>row.forEach(v=>{ if(v>max) max=v; }));
-    const cols = dates.length;
-    const grid = document.getElementById('heatmap');
-    grid.innerHTML = ''; grid.className = 'hm-grid';
-    grid.style.gridTemplateColumns = `150px repeat(${cols}, minmax(0, 1fr))`;
-    // Keep day columns at a readable minimum; the container scrolls on small screens.
-    grid.style.minWidth = (150 + cols*32) + 'px';
+  const WINDOW_N = 7;   // days shown at once on mobile
+  let _hmResizeBound = false;
+  function isMobileHM(){ return window.matchMedia('(max-width: 640px)').matches; }
 
-    const labelAll = cols <= 14;
-    grid.appendChild(document.createElement('div'));
-    dates.forEach((d,i)=>{
-      const ax=document.createElement('div'); ax.className='hm-axis';
-      if(labelAll || i===0 || i===cols-1 || i%7===0) ax.textContent=d.slice(8)+'/'+d.slice(5,7);
-      grid.appendChild(ax);
-    });
-    areas.forEach((area,ri)=>{
-      const lbl=document.createElement('div'); lbl.className='hm-area'; lbl.textContent=area; lbl.title=area;
-      lbl.onclick=()=>openArea(area); grid.appendChild(lbl);
-      for(let ci=0; ci<cols; ci++){
-        const v=(matrix[ri]&&matrix[ri][ci])||0;
-        const cell=document.createElement('div'); cell.className='hm-cell'; cell.dataset.col=ci;
-        const a=v?(0.18+0.82*(v/max)):0;
-        cell.style.background=v?`rgba(234,82,120,${a.toFixed(2)})`:'#191919';
-        cell.title=`${area} · ${dates[ci]} · ${v} position${v===1?'':'s'}`;
-        grid.appendChild(cell);
-      }
-    });
-    const sc=document.getElementById('scrubber');
-    sc.max=cols-1; sc.value=cols-1; sc.oninput=()=>updateScrub(+sc.value);
+  function renderHeatmap(){
+    const cols = DATA.heatmap.dates.length;
+    const sc = document.getElementById('scrubber');
+    sc.max = cols-1; sc.value = cols-1; sc.oninput = ()=>updateScrub(+sc.value);
+    if(!_hmResizeBound){
+      _hmResizeBound = true;
+      let t; window.addEventListener('resize', ()=>{ clearTimeout(t); t=setTimeout(()=>{
+        if(DATA) updateScrub(+document.getElementById('scrubber').value);
+      },150); });
+    }
     updateScrub(cols-1);
   }
 
+  // Draws the heatmap and snapshot. On mobile only a WINDOW_N-day window ending
+  // at idx is shown, so the slider pages back through earlier dates; on desktop
+  // the whole range is drawn and idx just sets the focus/snapshot.
   function updateScrub(idx){
-    const {dates, matrix} = DATA.heatmap; const areas=DATA.policy_areas;
-    document.getElementById('scrub-label').textContent=fmtDay(dates[idx]);
-    document.getElementById('snap-date').textContent=fmtDay(dates[idx]);
-    const lo=Math.max(0, idx-6);
-    document.querySelectorAll('.hm-cell').forEach(c=>{
-      const ci=+c.dataset.col;
-      c.classList.toggle('col-window', ci>=lo && ci<=idx);
-      c.classList.toggle('col-active', ci===idx);
+    const {dates, matrix} = DATA.heatmap; const areas = DATA.policy_areas;
+    const cols = dates.length;
+    let max = 1; matrix.forEach(r=>r.forEach(v=>{ if(v>max) max=v; }));
+
+    const mob = isMobileHM();
+    const hi = mob ? idx : cols-1;
+    const lo = mob ? Math.max(0, idx-(WINDOW_N-1)) : 0;
+    const vis = []; for(let c=lo; c<=hi; c++) vis.push(c);
+
+    document.getElementById('scrub-label').textContent = fmtDay(dates[idx]);
+    document.getElementById('snap-date').textContent  = fmtDay(dates[idx]);
+
+    const grid = document.getElementById('heatmap');
+    const labelW = mob ? 104 : 150;
+    grid.innerHTML = ''; grid.className = 'hm-grid';
+    grid.style.gridTemplateColumns = `${labelW}px repeat(${vis.length}, minmax(0, 1fr))`;
+    grid.style.minWidth = mob ? '0px' : (labelW + vis.length*32) + 'px';
+
+    grid.appendChild(document.createElement('div'));
+    vis.forEach(ci=>{ const ax=document.createElement('div'); ax.className='hm-axis';
+      // Day-only labels on mobile (single week, month is redundant); day/month on desktop.
+      ax.textContent = mob ? dates[ci].slice(8) : dates[ci].slice(8)+'/'+dates[ci].slice(5,7);
+      grid.appendChild(ax); });
+
+    const wlo = Math.max(0, idx-6);   // trailing-7 highlight window (desktop)
+    areas.forEach((area,ri)=>{
+      const lbl=document.createElement('div'); lbl.className='hm-area'; lbl.textContent=area; lbl.title=area;
+      lbl.onclick=()=>openArea(area); grid.appendChild(lbl);
+      vis.forEach(ci=>{
+        const v=(matrix[ri]&&matrix[ri][ci])||0;
+        const cell=document.createElement('div'); cell.className='hm-cell';
+        const a=v?(0.18+0.82*(v/max)):0;
+        cell.style.background=v?`rgba(234,82,120,${a.toFixed(2)})`:'#191919';
+        cell.title=`${area} · ${dates[ci]} · ${v} position${v===1?'':'s'}`;
+        if(ci===idx) cell.classList.add('col-active');
+        if(!mob && ci>=wlo && ci<=idx) cell.classList.add('col-window');
+        grid.appendChild(cell);
+      });
     });
-    const sums=areas.map((a,ri)=>{ let s=0; for(let j=lo;j<=idx;j++) s+=(matrix[ri]&&matrix[ri][j])||0; return {a,s}; })
+
+    // Snapshot: trailing 7-day window ending at idx.
+    const sums=areas.map((a,ri)=>{ let s=0; for(let j=wlo;j<=idx;j++) s+=(matrix[ri]&&matrix[ri][j])||0; return {a,s}; })
                     .sort((x,y)=>y.s-x.s);
     const mx=Math.max(1,...sums.map(x=>x.s));
     document.getElementById('snapshot').innerHTML=sums.map(x=>`
