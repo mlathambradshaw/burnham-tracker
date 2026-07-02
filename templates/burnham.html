@@ -78,7 +78,6 @@
   </div>
   <div style="display:flex; align-items:center; gap:10px;">
     <span id="status-text" style="font-size:.78rem; color:var(--muted);"></span>
-    <button class="btn-secondary" onclick="openPaste()">+ Add statement</button>
     <button class="btn-primary" id="refresh-btn" onclick="runRefresh()">
       <span class="spinner" id="refresh-spin" style="display:none; width:14px; height:14px;"></span>
       Refresh
@@ -136,7 +135,9 @@
     </div>
     <div class="hm-split">
       <div>
-        <div id="heatmap"></div>
+        <div style="overflow-x:auto; -webkit-overflow-scrolling:touch;">
+          <div id="heatmap"></div>
+        </div>
         <div style="margin-top:14px;">
           <input type="range" id="scrubber" min="0" max="1" value="1" style="width:100%;">
           <div style="display:flex; justify-content:space-between; font-size:.72rem; color:var(--faint);">
@@ -195,23 +196,6 @@
   </div>
 </div>
 
-<!-- Paste modal -->
-<div class="modal-bg" id="paste-modal" onclick="if(event.target===this) closeModal('paste-modal')">
-  <div class="modal" style="max-width:560px;">
-    <button class="modal-close" onclick="closeModal('paste-modal')">&times;</button>
-    <h2 style="font-size:1.15rem; color:var(--text); margin:0 0 4px;">Add a statement</h2>
-    <p class="panel-sub" style="margin:0 0 14px;">Paste a quote, tweet or line from a speech. It will be analysed and added to the tracker.</p>
-    <textarea id="paste-text" class="form-textarea" rows="6" placeholder="Paste what Burnham (or a named adviser) said…"></textarea>
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px;">
-      <input id="paste-source" class="form-input" placeholder="Source (e.g. Sky News interview)">
-      <input id="paste-date" type="date" class="form-input">
-    </div>
-    <div style="margin-top:14px; text-align:right;">
-      <button class="btn-primary" id="paste-submit" onclick="submitPaste()">Extract &amp; add</button>
-    </div>
-  </div>
-</div>
-
 <div class="tl-tip" id="tl-tip"></div>
 
 {% endblock %}
@@ -261,6 +245,8 @@
     const grid = document.getElementById('heatmap');
     grid.innerHTML = ''; grid.className = 'hm-grid';
     grid.style.gridTemplateColumns = `150px repeat(${cols}, minmax(0, 1fr))`;
+    // Keep day columns at a readable minimum; the container scrolls on small screens.
+    grid.style.minWidth = (150 + cols*32) + 'px';
 
     const labelAll = cols <= 14;
     grid.appendChild(document.createElement('div'));
@@ -428,21 +414,7 @@
   function finishRefresh(src){ if(src) src.close(); document.getElementById('refresh-btn').disabled=false; document.getElementById('refresh-spin').style.display='none'; }
 
   // ── Paste ──────────────────────────────────────────────────────────────
-  window.openPaste=()=>document.getElementById('paste-modal').classList.add('show');
   window.closeModal=id=>{ document.getElementById(id).classList.remove('show'); document.getElementById('tl-tip').style.display='none'; };
-  window.submitPaste=async function(){
-    const text=document.getElementById('paste-text').value.trim();
-    if(!text){ showToast('Paste some text first','error'); return; }
-    const btn=document.getElementById('paste-submit'); btn.disabled=true; btn.textContent='Extracting…';
-    try{
-      const r=await fetch('/api/paste',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({text, source:document.getElementById('paste-source').value.trim()||'Manual entry', date:document.getElementById('paste-date').value||undefined})});
-      const d=await r.json();
-      if(d.error){ showToast(d.error,'error'); }
-      else{ showToast(`Added ${d.added} position${d.added===1?'':'s'}`,'success'); document.getElementById('paste-text').value=''; closeModal('paste-modal'); loadData(); }
-    }catch(e){ showToast('Failed to add','error'); }
-    finally{ btn.disabled=false; btn.textContent='Extract & add'; }
-  };
 
   // ── Helpers ────────────────────────────────────────────────────────────
   function fmtDate(s){ if(!s) return ''; const d=new Date(s); return isNaN(d)?'':d.toLocaleDateString('en-GB',{day:'numeric',month:'short'}); }

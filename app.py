@@ -20,7 +20,7 @@ from typing import Optional
 from dotenv import load_dotenv
 from flask import Flask, Response, jsonify, render_template, request, stream_with_context
 
-from ai.extract import detect_flip_flops, extract_positions, extract_positions_streaming
+from ai.extract import detect_flip_flops, extract_positions_streaming
 from ai.filter import filter_articles_streaming
 from feeds.article_text import enrich_with_fulltext
 from feeds.news import fetch_all_news_feeds
@@ -434,44 +434,6 @@ def api_refresh_stream():
         mimetype="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
-
-
-@app.route("/api/paste", methods=["POST"])
-def api_paste():
-    """
-    Manual fallback: paste raw text (e.g. a tweet or speech excerpt) and run it
-    through extraction. Useful when the X bridge is down.
-    """
-    try:
-        body = request.get_json(force=True, silent=True) or {}
-        text = (body.get("text") or "").strip()
-        if not text:
-            return jsonify({"error": "Missing 'text'."}), 400
-        source = (body.get("source") or "Manual entry").strip()
-        date_iso = (body.get("date") or _now_iso())
-        url = (body.get("url")
-               or f"manual:{hashlib.md5(text.encode()).hexdigest()[:12]}")
-
-        article = {
-            "id": hashlib.md5(url.encode()).hexdigest(),
-            "title": text[:120], "summary": text, "url": url,
-            "source": source,
-            "source_color": SOURCE_COLORS.get(source, DEFAULT_COLOR),
-            "published_iso": date_iso, "is_own_words": True,
-        }
-        import anthropic
-        from ai.extract import _build_system_prompt
-        client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
-        positions = extract_positions(article, client, _build_system_prompt())
-        records = [_make_record(article, p) for p in positions]
-        _add_positions(records)
-        _mark_processed(url)
-        if records:
-            _recompute_flip_flops()
-        return jsonify({"added": len(records), "positions": records})
-    except Exception as exc:
-        log.error("Error in /api/paste: %s", exc, exc_info=True)
-        return jsonify({"error": "Failed to process pasted text."}), 500
 
 
 def _sse(data: dict) -> str:
