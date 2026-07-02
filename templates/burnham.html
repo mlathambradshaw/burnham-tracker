@@ -56,7 +56,7 @@
   .modal { background:var(--panel); border:1px solid var(--border); color:var(--text); border-radius:8px; max-width:880px; width:100%; padding:22px 24px; box-shadow:0 12px 40px rgba(0,0,0,.5); }
   .modal-close { float:right; cursor:pointer; color:var(--muted); font-size:1.25rem; line-height:1; border:none; background:none; }
   .tl-dot { cursor:pointer; }
-  .tl-tip { position:fixed; z-index:1100; max-width:320px; background:#000; border:1px solid var(--border); color:#fff; font-size:.75rem; line-height:1.45; padding:8px 10px; border-radius:5px; pointer-events:none; display:none; box-shadow:0 4px 14px rgba(0,0,0,.5); }
+  .tl-tip { position:fixed; z-index:1100; max-width:min(320px, calc(100vw - 24px)); background:#000; border:1px solid var(--border); color:#fff; font-size:.8rem; line-height:1.5; padding:10px 12px; border-radius:6px; pointer-events:none; display:none; box-shadow:0 4px 14px rgba(0,0,0,.5); }
   .legend-dot { display:inline-block; width:9px; height:9px; border-radius:50%; vertical-align:middle; margin-right:4px; }
 
   /* Responsive two-column layouts — stack on narrow viewports */
@@ -190,7 +190,7 @@
       Each point is a position, set by date (left to right, from the by-election to today) and by how firm it is (theme at the bottom, commitment at the top).
       A dashed line marks a reversal. Hover a point for detail.
     </p>
-    <div id="area-timeline" style="position:relative;"></div>
+    <div id="area-timeline" style="position:relative; overflow-x:auto; -webkit-overflow-scrolling:touch;"></div>
     <div id="area-list" style="margin-top:16px; display:flex; flex-direction:column;"></div>
   </div>
 </div>
@@ -236,7 +236,7 @@
   function renderAll(){ renderHeatmap(); renderLatest(); renderDev(); }
 
   // ── Heatmap ────────────────────────────────────────────────────────────
-  const WINDOW_N = 7;   // days shown at once on mobile
+  const WINDOW_N = 5;   // days shown at once on mobile
   let _hmResizeBound = false;
   function isMobileHM(){ return window.matchMedia('(max-width: 640px)').matches; }
 
@@ -277,8 +277,7 @@
 
     grid.appendChild(document.createElement('div'));
     vis.forEach(ci=>{ const ax=document.createElement('div'); ax.className='hm-axis';
-      // Day-only labels on mobile (single week, month is redundant); day/month on desktop.
-      ax.textContent = mob ? dates[ci].slice(8) : dates[ci].slice(8)+'/'+dates[ci].slice(5,7);
+      ax.textContent = dates[ci].slice(8)+'/'+dates[ci].slice(5,7);
       grid.appendChild(ax); });
 
     const wlo = Math.max(0, idx-6);   // trailing-7 highlight window (desktop)
@@ -352,7 +351,7 @@
 
   // ── Area timeline modal ────────────────────────────────────────────────
   function openArea(area){
-    document.getElementById('tl-tip').style.display='none';
+    const _t=document.getElementById('tl-tip'); _t.style.display='none'; _t._pinned=false;
     const items=(DATA.by_area[area]||[]).slice().sort((a,b)=>(a.date||'').localeCompare(b.date||''));
     document.getElementById('area-modal-title').textContent=area;
     document.getElementById('area-timeline').innerHTML=items.length?timelineSvg(items):'<p class="panel-sub">No positions captured in this area yet.</p>';
@@ -362,25 +361,31 @@
   }
 
   function timelineSvg(items){
-    const W=820, H=240, padL=80, padR=20, padT=20, padB=30;
+    const mob=isMobileHM();
     const dates=DATA.heatmap.dates;
+    const days=dates.length;
+    const padL=mob?66:80, padR=20, padT=mob?26:20, padB=mob?36:30;
+    const H=mob?300:240;
+    // On mobile give each day room (~54px) and let it scroll, so dots and labels are big enough.
+    const W=mob?Math.max(360, padL+padR+days*54):820;
     const min=new Date(dates[0]).getTime();
     const max=new Date(dates[dates.length-1]).getTime();
     const span=Math.max(1, max-min);
     const x=t=>padL+(W-padL-padR)*((t-min)/span);
-    const yBand={topic:H-padB-20, emerging:(H-padB-padT)/2+padT, firm:padT+20};
+    const yBand={topic:H-padB-24, emerging:(H-padB-padT)/2+padT, firm:padT+24};
     const times=items.map(p=>new Date(p.date).getTime());
-    let svg=`<svg viewBox="0 0 ${W} ${H}" style="width:100%; height:auto;">`;
+    const fLab=mob?17:11, fAxis=mob?13:10, dotR=mob?8:5, dotRbig=mob?11:7, ringR=mob?15:10, spread=mob?12:7;
+    const svgStyle=mob?`width:${W}px; height:auto;`:`width:100%; height:auto;`;
+    let svg=`<svg viewBox="0 0 ${W} ${H}" style="${svgStyle}">`;
     [['firm','Firm'],['emerging','Emerging'],['topic','Topic']].forEach(([k,lab])=>{
       const yy=yBand[k];
       svg+=`<line x1="${padL}" y1="${yy}" x2="${W-padR}" y2="${yy}" stroke="#262626"/>`;
-      svg+=`<text x="${padL-8}" y="${yy+4}" text-anchor="end" font-size="11" fill="${SOL_COLOR[k]}" font-weight="600">${lab}</text>`;
+      svg+=`<text x="${padL-8}" y="${yy+fLab*0.35}" text-anchor="end" font-size="${fLab}" fill="${SOL_COLOR[k]}" font-weight="600">${lab}</text>`;
     });
     // Fan out dots that share a date + firmness so overlapping ones stay visible.
-    const groups={}; items.forEach((p,i)=>{ const k=(p.date||'').slice(0,10)+'|'+p.solidity; (groups[k]=groups[k]||[]).push(i); });
+    const groups={}; items.forEach((p,i)=>{ const key=(p.date||'').slice(0,10)+'|'+p.solidity; (groups[key]=groups[key]||[]).push(i); });
     const off={}; Object.values(groups).forEach(idxs=>{ const n=idxs.length; idxs.forEach((gi,k)=>{ off[gi]=(k-(n-1)/2); }); });
-    const SPREAD=7;
-    const cxOf=i=>x(times[i])+(off[i]||0)*SPREAD;
+    const cxOf=i=>x(times[i])+(off[i]||0)*spread;
 
     const byId={}; items.forEach((p,i)=>byId[p.id]=i);
     items.forEach((p,i)=>{
@@ -391,24 +396,31 @@
     });
     items.forEach((p,i)=>{
       const cx=cxOf(i), cy=yBand[p.solidity];
-      svg+=`<circle class="tl-dot" data-i="${i}" cx="${cx}" cy="${cy}" r="${p.what_will_change?7:5}" fill="${SOL_COLOR[p.solidity]}" fill-opacity="0.9" stroke="#0a0a0a" stroke-width="1.5"/>`;
-      if(p.what_will_change) svg+=`<circle cx="${cx}" cy="${cy}" r="10" fill="none" stroke="#ea5278" stroke-width="1.2"/>`;
+      svg+=`<circle class="tl-dot" data-i="${i}" cx="${cx}" cy="${cy}" r="${p.what_will_change?dotRbig:dotR}" fill="${SOL_COLOR[p.solidity]}" fill-opacity="0.9" stroke="#0a0a0a" stroke-width="1.5"/>`;
+      if(p.what_will_change) svg+=`<circle cx="${cx}" cy="${cy}" r="${ringR}" fill="none" stroke="#ea5278" stroke-width="1.2"/>`;
     });
-    svg+=`<text x="${padL}" y="${H-8}" font-size="10" fill="#6b6b73">${fmtDay(dates[0])}</text>`;
-    svg+=`<text x="${W-padR}" y="${H-8}" text-anchor="end" font-size="10" fill="#6b6b73">${fmtDay(dates[dates.length-1])}</text>`;
+    svg+=`<text x="${padL}" y="${H-10}" font-size="${fAxis}" fill="#6b6b73">${fmtDay(dates[0])}</text>`;
+    svg+=`<text x="${W-padR}" y="${H-10}" text-anchor="end" font-size="${fAxis}" fill="#6b6b73">${fmtDay(dates[dates.length-1])}</text>`;
     svg+=`</svg>`;
     return svg;
   }
 
+  // Tooltip: follows the cursor on desktop (hover); on touch, tap a dot to pin it
+  // open, tap elsewhere to dismiss.
   function bindDots(items){
     const tip=document.getElementById('tl-tip');
+    const html=p=>`<b>${p.solidity.toUpperCase()}</b> · ${fmtDay(p.date)}<br>${esc(p.position)}${p.quote?`<br><span style="color:#8f8f97">“${esc(p.quote)}”</span>`:''}`;
+    const showAt=(p,left,top)=>{
+      tip.innerHTML=html(p); tip.style.display='block';
+      const w=Math.min(320, window.innerWidth-24);
+      tip.style.left=Math.max(12, Math.min(left, window.innerWidth-w-12))+'px';
+      tip.style.top=Math.max(12, top)+'px';
+    };
     document.querySelectorAll('#area-timeline .tl-dot').forEach(dot=>{
-      dot.addEventListener('mousemove', e=>{
-        const p=items[+dot.dataset.i];
-        tip.innerHTML=`<b>${p.solidity.toUpperCase()}</b> · ${fmtDay(p.date)}<br>${esc(p.position)}${p.quote?`<br><span style="color:#8f8f97">“${esc(p.quote)}”</span>`:''}`;
-        tip.style.display='block'; tip.style.left=(e.clientX+14)+'px'; tip.style.top=(e.clientY+14)+'px';
-      });
-      dot.addEventListener('mouseleave', ()=>{ tip.style.display='none'; });
+      const p=items[+dot.dataset.i];
+      dot.addEventListener('mousemove', e=>{ if(tip._pinned) return; showAt(p, e.clientX+14, e.clientY+14); });
+      dot.addEventListener('mouseleave', ()=>{ if(!tip._pinned) tip.style.display='none'; });
+      dot.addEventListener('click', e=>{ e.stopPropagation(); const r=dot.getBoundingClientRect(); tip._pinned=true; showAt(p, r.left, r.bottom+10); });
     });
   }
 
@@ -430,7 +442,12 @@
   function finishRefresh(src){ if(src) src.close(); document.getElementById('refresh-btn').disabled=false; document.getElementById('refresh-spin').style.display='none'; }
 
   // ── Paste ──────────────────────────────────────────────────────────────
-  window.closeModal=id=>{ document.getElementById(id).classList.remove('show'); document.getElementById('tl-tip').style.display='none'; };
+  window.closeModal=id=>{ document.getElementById(id).classList.remove('show'); const t=document.getElementById('tl-tip'); t.style.display='none'; t._pinned=false; };
+  // Tap anywhere that isn't a dot dismisses a pinned tooltip (touch devices).
+  document.addEventListener('click', e=>{
+    const t=document.getElementById('tl-tip');
+    if(t && t._pinned && !(e.target.closest && e.target.closest('.tl-dot'))){ t._pinned=false; t.style.display='none'; }
+  });
 
   // ── Helpers ────────────────────────────────────────────────────────────
   function fmtDate(s){ if(!s) return ''; const d=new Date(s); return isNaN(d)?'':d.toLocaleDateString('en-GB',{day:'numeric',month:'short'}); }
