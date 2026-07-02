@@ -374,16 +374,22 @@
       svg+=`<line x1="${padL}" y1="${yy}" x2="${W-padR}" y2="${yy}" stroke="#262626"/>`;
       svg+=`<text x="${padL-8}" y="${yy+4}" text-anchor="end" font-size="11" fill="${SOL_COLOR[k]}" font-weight="600">${lab}</text>`;
     });
+    // Fan out dots that share a date + firmness so overlapping ones stay visible.
+    const groups={}; items.forEach((p,i)=>{ const k=(p.date||'').slice(0,10)+'|'+p.solidity; (groups[k]=groups[k]||[]).push(i); });
+    const off={}; Object.values(groups).forEach(idxs=>{ const n=idxs.length; idxs.forEach((gi,k)=>{ off[gi]=(k-(n-1)/2); }); });
+    const SPREAD=7;
+    const cxOf=i=>x(times[i])+(off[i]||0)*SPREAD;
+
     const byId={}; items.forEach((p,i)=>byId[p.id]=i);
     items.forEach((p,i)=>{
       if(p.flip_flop && byId[p.flip_flop.contradicts]!=null){
         const j=byId[p.flip_flop.contradicts];
-        svg+=`<line x1="${x(times[j])}" y1="${yBand[items[j].solidity]}" x2="${x(times[i])}" y2="${yBand[p.solidity]}" stroke="#4ca0a7" stroke-width="1.5" stroke-dasharray="4 3"/>`;
+        svg+=`<line x1="${cxOf(j)}" y1="${yBand[items[j].solidity]}" x2="${cxOf(i)}" y2="${yBand[p.solidity]}" stroke="#4ca0a7" stroke-width="1.5" stroke-dasharray="4 3"/>`;
       }
     });
     items.forEach((p,i)=>{
-      const cx=x(times[i]), cy=yBand[p.solidity];
-      svg+=`<circle class="tl-dot" data-i="${i}" cx="${cx}" cy="${cy}" r="${p.what_will_change?7:5}" fill="${SOL_COLOR[p.solidity]}" stroke="#0a0a0a" stroke-width="1.5"/>`;
+      const cx=cxOf(i), cy=yBand[p.solidity];
+      svg+=`<circle class="tl-dot" data-i="${i}" cx="${cx}" cy="${cy}" r="${p.what_will_change?7:5}" fill="${SOL_COLOR[p.solidity]}" fill-opacity="0.9" stroke="#0a0a0a" stroke-width="1.5"/>`;
       if(p.what_will_change) svg+=`<circle cx="${cx}" cy="${cy}" r="10" fill="none" stroke="#ea5278" stroke-width="1.2"/>`;
     });
     svg+=`<text x="${padL}" y="${H-8}" font-size="10" fill="#6b6b73">${fmtDay(dates[0])}</text>`;
