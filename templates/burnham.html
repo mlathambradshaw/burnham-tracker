@@ -78,10 +78,6 @@
   </div>
   <div style="display:flex; align-items:center; gap:10px;">
     <span id="status-text" style="font-size:.78rem; color:var(--muted);"></span>
-    <button class="btn-primary" id="refresh-btn" onclick="runRefresh()">
-      <span class="spinner" id="refresh-spin" style="display:none; width:14px; height:14px;"></span>
-      Refresh
-    </button>
   </div>
 </div>
 
@@ -91,8 +87,8 @@
 </div>
 <div id="empty-state" style="display:none; padding:56px; text-align:center;">
   <p style="color:var(--text); font-size:1rem; margin:0 0 6px;">No positions yet.</p>
-  <p style="color:var(--muted); font-size:.85rem; margin:0 0 16px;">Run a scan to gather what Burnham has said.</p>
-  <button class="btn-primary" onclick="runRefresh()">Run scan</button>
+  <p style="color:var(--muted); font-size:.85rem; margin:0 0 16px;">The tracker updates automatically twice a day. If this is a fresh deployment, the first scan is running now — check back in a minute.</p>
+  <button class="btn-secondary" onclick="location.reload()">Check again</button>
 </div>
 
 <div id="dashboard" style="display:none;">
@@ -424,24 +420,7 @@
     });
   }
 
-  // ── Refresh (SSE) ──────────────────────────────────────────────────────
-  window.runRefresh=function(){
-    const btn=document.getElementById('refresh-btn'), spin=document.getElementById('refresh-spin');
-    btn.disabled=true; spin.style.display='inline-block';
-    const st=document.getElementById('status-text');
-    const src=new EventSource('/api/refresh/stream');
-    src.onmessage=e=>{
-      let m; try{ m=JSON.parse(e.data); }catch{ return; }
-      if(m.type==='status') st.textContent=m.message;
-      if(m.type==='positions') st.textContent='Found '+(m.items?m.items.length:0)+' more…';
-      if(m.type==='error'){ st.textContent='Refresh failed.'; finishRefresh(src); }
-      if(m.type==='done'){ st.textContent=m.new?('Added '+m.new+' positions.'):'Up to date.'; finishRefresh(src); loadData(); }
-    };
-    src.onerror=()=>{ finishRefresh(src); loadData(); };
-  };
-  function finishRefresh(src){ if(src) src.close(); document.getElementById('refresh-btn').disabled=false; document.getElementById('refresh-spin').style.display='none'; }
-
-  // ── Paste ──────────────────────────────────────────────────────────────
+  // ── Modal close ────────────────────────────────────────────────────────
   window.closeModal=id=>{ document.getElementById(id).classList.remove('show'); const t=document.getElementById('tl-tip'); t.style.display='none'; t._pinned=false; };
   // Tap anywhere that isn't a dot dismisses a pinned tooltip (touch devices).
   document.addEventListener('click', e=>{

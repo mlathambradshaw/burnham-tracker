@@ -18,7 +18,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from dotenv import load_dotenv
-from flask import Flask, Response, jsonify, render_template, request, stream_with_context
+from flask import Flask, jsonify, render_template, request
 
 from ai.extract import detect_flip_flops, extract_positions_streaming
 from ai.filter import filter_articles_streaming
@@ -386,58 +386,6 @@ def api_burnham_data():
     except Exception as exc:
         log.error("Error building dashboard data: %s", exc, exc_info=True)
         return jsonify({"error": "Failed to build dashboard data."}), 500
-
-
-@app.route("/api/refresh/stream")
-def api_refresh_stream():
-    """SSE endpoint: run the pipeline and stream progress + new positions."""
-
-    @stream_with_context
-    def generate():
-        if _pipeline_running["on"]:
-            yield _sse({"type": "status", "message": "A refresh is already running…"})
-            for _ in range(180):
-                time.sleep(1)
-                if not _pipeline_running["on"]:
-                    break
-            yield _sse({"type": "done", "new": 0})
-            return
-
-        _pipeline_running["on"] = True
-        try:
-            import queue
-            q: "queue.Queue" = queue.Queue()
-
-            def emit(ev):
-                q.put(ev)
-
-            def _work():
-                try:
-                    _run_pipeline_streaming(emit)
-                except Exception as exc:
-                    log.error("Stream pipeline error: %s", exc, exc_info=True)
-                    q.put({"type": "error", "message": "Refresh failed."})
-                finally:
-                    q.put(None)
-
-            threading.Thread(target=_work, daemon=True).start()
-            while True:
-                ev = q.get()
-                if ev is None:
-                    break
-                yield _sse(ev)
-        finally:
-            _pipeline_running["on"] = False
-
-    return Response(
-        generate(),
-        mimetype="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
-
-
-def _sse(data: dict) -> str:
-    return f"data: {json.dumps(data)}\n\n"
 
 
 # ---------------------------------------------------------------------------
