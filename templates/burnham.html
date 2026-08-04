@@ -62,7 +62,7 @@
   /* Responsive two-column layouts — stack on narrow viewports */
   .hm-split { display:grid; grid-template-columns:1.4fr 1fr; gap:24px; align-items:start; }
   .two-col  { display:grid; grid-template-columns:1.3fr 1fr; gap:18px; }
-  @media (max-width: 980px){
+  @media (max-width: 1100px){
     .hm-split, .two-col { grid-template-columns:1fr; }
   }
 </style>
@@ -140,8 +140,8 @@
     <div style="margin-bottom:14px;">
       <span class="panel-title">Attention heatmap</span>
       <div class="panel-sub" style="margin-top:5px; max-width:940px;">
-        Rows are policy areas; columns are days since the Makerfield by-election. The darker a square, the more he said
-        about that area that day. Move the slider to a date and the panel on the right ranks the areas by his attention over the preceding week.
+        Rows are policy areas; each column is a day. The darker a square, the more he said about that area that day.
+        Drag the slider to move through the timeline; the panel on the right ranks the areas by his attention over the week up to the day you land on.
       </div>
     </div>
     <div class="hm-split">
@@ -232,7 +232,8 @@
   function renderAll(){ renderHeatmap(); renderLatest(); renderDev(); }
 
   // ── Heatmap ────────────────────────────────────────────────────────────
-  const WINDOW_N = 5;   // days shown at once on mobile
+  const WINDOW_N = 5;    // days shown at once on mobile
+  const WINDOW_N_DESK = 14;  // days shown at once on desktop (slider pages through the rest)
   let _hmResizeBound = false;
   function isMobileHM(){ return window.matchMedia('(max-width: 640px)').matches; }
 
@@ -249,17 +250,18 @@
     updateScrub(cols-1);
   }
 
-  // Draws the heatmap and snapshot. On mobile only a WINDOW_N-day window ending
-  // at idx is shown, so the slider pages back through earlier dates; on desktop
-  // the whole range is drawn and idx just sets the focus/snapshot.
+  // Draws the heatmap and snapshot. A window of days ending at idx is shown
+  // (fewer on mobile, more on desktop) so the grid stays inside its box; the
+  // slider pages that window back and forth through the full date range.
   function updateScrub(idx){
     const {dates, matrix} = DATA.heatmap; const areas = DATA.policy_areas;
     const cols = dates.length;
     let max = 1; matrix.forEach(r=>r.forEach(v=>{ if(v>max) max=v; }));
 
     const mob = isMobileHM();
-    const hi = mob ? idx : cols-1;
-    const lo = mob ? Math.max(0, idx-(WINDOW_N-1)) : 0;
+    const winN = mob ? WINDOW_N : WINDOW_N_DESK;
+    const hi = idx;
+    const lo = Math.max(0, idx-(winN-1));
     const vis = []; for(let c=lo; c<=hi; c++) vis.push(c);
 
     document.getElementById('scrub-label').textContent = fmtDay(dates[idx]);
