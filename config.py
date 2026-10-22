@@ -60,7 +60,7 @@ POLICY_AREAS = [
     "Crime, Policing & Justice",
     "Immigration & Asylum",
     "Education & Skills",
-    "Foreign Affairs & Defence",
+    "International",
 ]
 
 POLICY_AREA_DESCRIPTIONS = {
@@ -113,7 +113,7 @@ POLICY_AREA_DESCRIPTIONS = {
         "Schools, early years, further and higher education, apprenticeships "
         "and technical/vocational skills, tuition fees."
     ),
-    "Foreign Affairs & Defence": (
+    "International": (
         "Defence spending and the armed forces, NATO, Ukraine and the Middle "
         "East, the EU relationship, international development and diplomacy."
     ),
